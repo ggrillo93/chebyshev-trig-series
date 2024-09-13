@@ -57,6 +57,7 @@ class TrigExpansion:
         left, right = np.split(fft, 2)
         if self.trig_type == 'cos':
             coeff = 2 * np.real(right) / N
+            coeff[0] *= 0.5
         else:
             coeff = -2 * np.imag(left) / N
         return coeff
@@ -162,7 +163,9 @@ class TrigExpansion:
             A[:, i + 1] = trig_func((i + 1) * thetas)
         B = A.T @ A
         if self.trig_type == 'cos':
-            return np.linalg.solve(B, A.T @ vals)
+            coeff = np.linalg.solve(B, A.T @ vals)
+            coeff[0] *= 0.5
+            return coeff
         else:
             return np.linalg.solve(B, A.T @ vals)[1:] # exclude constant term for sine since sine has no zero harmonic
 
