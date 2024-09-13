@@ -1,5 +1,6 @@
 import numpy as np
 from scipy.fft import dct, dst, idct, idst
+from nfft import nfft_adjoint
 
 class TrigExpansion:
     def __init__(self, coeffs=None, thetas=None, vals=None, deg=None, useFFT=True, trig_type='cos'):
@@ -28,7 +29,11 @@ class TrigExpansion:
             return coeffs, len(coeffs) - 1
 
         if useFFT:
-            fftCoeff = self._perform_fft(vals)
+            if type(thetas) == type(None):
+                fftCoeff = self._perform_fft(vals)
+            else:
+                assert len(thetas) == len(vals), "Values for fit need to be equal to number of points"
+                fftCoeff = self._perform_nfft(vals, thetas)
             deg = deg if deg is not None else len(fftCoeff) - 1
             return fftCoeff[:deg + 1], deg
         else:
@@ -36,6 +41,7 @@ class TrigExpansion:
             return self.fit(thetas, vals, deg), deg
 
     def _perform_fft(self, vals):
+        """ Uniform FFT """
         if self.trig_type == 'cos':
             coeff = dct(vals) / len(vals)
             coeff[0] *= 0.5
@@ -43,6 +49,17 @@ class TrigExpansion:
         else:
             coeff = dst(vals) / len(vals)
             return coeff[1::2]
+        
+    def _perform_nfft(self, vals, thetas):
+        """ Non-uniform FFT """
+        N = len(vals)
+        fft = nfft_adjoint(0.5 * thetas / np.pi, vals, N)
+        left, right = np.split(fft, 2)
+        if self.trig_type == 'cos':
+            coeff = 2 * np.real(right) / N
+        else:
+            coeff = -2 * np.imag(left) / N
+        return coeff
 
     def __add__(self, obj):
         if isinstance(obj, TrigExpansion) and self.trig_type == obj.trig_type:
@@ -135,9 +152,9 @@ class TrigExpansion:
             return cosExpansion(vals = new_vals)
         return NotImplemented # need to think about the sine case
 
-    def fit(self, thetas, vals, deg):
+    def fit(self, thetas, vals, deg): # not sure if this is working properly
         M = len(vals)
-        assert M >= deg + 1, "Number of values needs to be at least 2 * deg + 1"
+        assert M >= deg + 1, "Number of values needs to be at least deg + 1"
         A = np.zeros((M, deg + 1))
         A[:, 0] = 1
         for i in range(deg):
