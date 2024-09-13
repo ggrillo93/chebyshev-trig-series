@@ -153,19 +153,19 @@ class TrigExpansion:
             return cosExpansion(vals = new_vals)
         return NotImplemented # need to think about the sine case
 
-    def fit(self, thetas, vals, deg): # not sure if this is working properly
+    def fit(self, thetas, vals, deg): # seems to be working as of 13/9/24
         M = len(vals)
         assert M >= deg + 1, "Number of values needs to be at least deg + 1"
         A = np.zeros((M, deg + 1))
-        A[:, 0] = 1
-        for i in range(deg):
-            trig_func = np.cos if self.trig_type == 'cos' else np.sin
-            A[:, i + 1] = trig_func((i + 1) * thetas)
-        B = A.T @ A
         if self.trig_type == 'cos':
-            return np.linalg.solve(B, A.T @ vals)
+            A[:, 0] = 1
+            for i in range(deg):
+                A[:, i + 1] = np.cos((i + 1) * thetas)
         else:
-            return np.linalg.solve(B, A.T @ vals)[1:] # exclude constant term for sine since sine has no zero harmonic
+            for i in range(deg + 1):
+                A[:, i] = np.sin((i + 1) * thetas)
+        B = A.T @ A
+        return np.linalg.solve(B, A.T @ vals)
 
     def evalGrid(self, thetas):
         res = 0
