@@ -321,14 +321,13 @@ class TrigExpansionArray:
         """
         return np.array([exp.eval(theta) for exp in self.expansions])
 
-    def eval_all_grid(self, thetas = None, useFFT = False):
+    def eval_all_grid(self, thetas = None):
         """
         Evaluate all expansions on a grid of theta values.
         Returns a list of results.
         """
-        assert(not (thetas is None and not useFFT))
 
-        if useFFT:
+        if thetas is None:
             result = np.array([exp.evalGridFFT() for exp in self.expansions])
         else:
             result = np.array([exp.evalGrid(thetas) for exp in self.expansions])
