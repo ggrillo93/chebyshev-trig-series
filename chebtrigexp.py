@@ -1,26 +1,35 @@
 from trigexp import *
+from findiff import FinDiff
 from chebpy.core.algorithms import vals2coeffs2, chebpts2
 from chebpy.core.chebtech import Chebtech
 
 class ChebTrigExpansion():
-    def __init__(self, TrigExpArr = None, ChebExpArr = None, parity = None, trig_type = None): # parity corresponds to the parity of the first Fourier coefficient
+    def __init__(self, GridVals = None, TrigExpArr = None, ChebExpArr = None, parity = None, trig_type = None, rho1D = None):
+        """ Chebyshev-trigonometric expansion in polar coordinates. The angular dependence is represented by a cosine or sine series at each radial coordinate, 
+            and the radial dependency of the coefficients of these series are treated with parity restricted Chebyshev polynomials. 
+            Can initialize with a 2D grid of sampled points in (rho, theta), an array of TrigExpansions, one for each rho, or an array of Chebyshev expansions, 
+            one for each Fourier coefficient. """
 
-        assert(not (type(TrigExpArr) == type(None) and (type(ChebExpArr) == type(None))))
+        assert(not (type(TrigExpArr) == type(None) and (type(ChebExpArr) == type(None)) and (type(GridVals) != None)))
 
         if type(TrigExpArr) != None:
 
             assert(all(isinstance(item, self.trig_type) for item in TrigExpArr)) # make sure all trigonometric expansions are of the same type
             assert(all(item.deg == self.deg for item in TrigExpArr)) # make sure all expansion have the same degree (could pad with zeros though)
             assert(len(TrigExpArr) % 2 == 0) # make sure the number of spatial samples is even
-            assert(type(parity) != type(None))
+            assert(type(parity) != type(None) or type(rho1D) != type(None))
 
-            self.parity = parity
+            if type(parity) != type(None):
+                self.parity = parity
+            else:
+                self.calcParity(rho1D, TrigExpArr)
+
             self.nFourier = TrigExpArr[0].deg + 1
             self.nCheb = 2 * len(TrigExpArr) # half of these will be zero
             self.trig_type = type(TrigExpArr[0])
             self.TrigExpArr, self.TrigCoeffGrid, self.ChebCoeffGrid, self.ChebExpArr = self._initialize_with_TrigExp(TrigExpArr) # the new TrigExpArr will be 2 sided
             
-        else:
+        elif type(ChebExpArr) != type(None):
             self.nCheb = len(ChebExpArr[0].coeffs)
 
             assert(self.nCheb % 2 == 0)
@@ -30,6 +39,12 @@ class ChebTrigExpansion():
             self.ChebExpArr = ChebExpArr
             self.nFourier = len(ChebExpArr)
             self.ChebCoeffGrid, self.TrigCoeffGrid, self.TrigExpArr = self._initialize_with_ChebExp()
+        
+        else:
+            assert(type(trig_type) != type(None) and type)
+
+            self.nCheb = len(GridVals)
+            pass
 
     def _initialize_with_TrigExp(self, TrigExpArr):
 
