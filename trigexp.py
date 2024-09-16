@@ -458,7 +458,7 @@ class TrigExpansionArray:
         else:
             mult[::2] = -1
         
-        for i in range(self.deg + 1):
+        for i in range(self.N):
             coeffs2Side[i] *= mult
 
         return coeffs2Side
