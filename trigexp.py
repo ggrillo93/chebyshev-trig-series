@@ -330,7 +330,10 @@ class TrigExpansionArray:
         if thetas is None:
             result = np.array([exp.evalGridFFT() for exp in self.expansions])
         else:
-            result = np.array([exp.evalGrid(thetas) for exp in self.expansions])
+            if thetas.ndim == 1:
+                result = np.array([exp.evalGrid(thetas) for exp in self.expansions])
+            else:
+                result = np.array([self.expansions[i].evalGrid(thetas[i]) for i in range(self.N)])
         
         return result
 
