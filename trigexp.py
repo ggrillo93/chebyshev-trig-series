@@ -257,7 +257,7 @@ class TrigExpansionArray:
                 self.expansions = np.array(expansions)
                 self.trig_type, self.deg = self._validate_type()
                 self.N = len(expansions)
-                self.GridVals = self.eval_all_grid(useFFT = True)
+                self.GridVals = self.eval_all_grid()
             else:
                 assert(trig_type is not None)
                 self.N = len(GridVals)
