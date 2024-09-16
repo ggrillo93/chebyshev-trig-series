@@ -450,9 +450,7 @@ class TrigExpansionArray:
     def twoSided(self): # assumes magnetic axis is not included, could add this case later
         """ Constructs two sided version of coefficients of expansion array, multiplying coefficients according to parity """
 
-        coeffs2Side = np.zeros([2 * self.N, self.deg + 1])
-        coeffs2Side[self.N:] = np.copy(self.coeffGrid)
-        coeffs2Side[:self.N] = np.flipud(self.coeffGrid)
+        coeffs2Side = np.vstack((np.flipud(self.coeffGrid), self.coeffGrid))
 
         mult = np.ones(self.deg + 1)
         if self.parity == 'even':
