@@ -1,8 +1,8 @@
 import numpy as np
 from scipy.fft import dct, dst, idct, idst
 from nfft import nfft_adjoint
-from scipy.interpolate import CubicSpline
 from matplotlib import pyplot as plt
+from numpy.polynomial.polynomial import polyfit
 
 class TrigExpansion:
     """ useFFT = True is much faster for evenly spaced samples and slower up to nTheta ~ 50 for unevenly spaced samples """
@@ -512,14 +512,21 @@ class TrigExpansionArray: # should add option to initialize with coefficient gri
 
         return coeffs2Side
     
-    def calcParity(self): # working with second harmonic bc sometimes first harmonic is zero after differentiating with respect to theta
-        firstHarm = self.coeffGrid[:, 1]
-        splEven = CubicSpline(self.rho1D, firstHarm / np.max(np.abs(firstHarm)), extrapolate = True)
-        prime = splEven.derivative()(0)
-        if np.abs(prime) < 1e-3: # if it's not even, the derivative at the axis will be nonzero
-            parity = 'odd'
+    def calcParity(self, printSums = False):
+        firstHarm = self.coeffGrid[:, 0]
+        if not np.allclose(firstHarm, np.zeros(len(firstHarm))):
+            coeff = polyfit(self.rho1D[:5], firstHarm[:5], 3)
+            even = sum(np.abs(coeff[::2]))
+            odd = sum(np.abs(coeff[1::2]))
+            parity = 'even' if even > odd else 'odd'
         else:
-            parity = 'even'
+            secondHarm = self.coeffGrid[:, 1]
+            coeff = polyfit(self.rho1D[:5], secondHarm[:5], 3)
+            even = sum(np.abs(coeff[::2]))
+            odd = sum(np.abs(coeff[1::2]))
+            parity = 'odd' if even > odd else 'even'
+        if printSums:
+            print([even, odd])
         return parity
     
     def plotCoeffs(self, nHarm = 5, rhoLim = 1, twoSided = True):

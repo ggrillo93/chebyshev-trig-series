@@ -8,7 +8,7 @@ class ChebExpansionArray():
         assert(polynomials is not None or TrigCoeff2Side is not None or ChebCoeffGrid is not None)
         if polynomials is not None:
             assert(all(isinstance(p, Chebyshev)) for p in polynomials) # check all polynomials are Chebyshev polynomials
-            assert(all(len(p.degree()) == len(polynomials[0].degree()) for p in polynomials)) # check all polynomials are of the same degree
+            assert(all(p.degree() == polynomials[0].degree() for p in polynomials)) # check all polynomials are of the same degree
             self.polynomials = polynomials
             self.ChebDeg = polynomials[0].degree()
             if ChebCoeffGrid is not None:
@@ -41,7 +41,7 @@ class ChebExpansionArray():
         ChebCoeffGrid = np.copy(TrigCoeff2Side) * 0
         polynomials = np.zeros(TrigDeg + 1, dtype = Chebyshev)
         adj = 0 if self.parity == 'even' else 1
-        for i in range(self.TrigDeg + 1):
+        for i in range(TrigDeg + 1):
             sign = 1 if (i + adj) % 2 == 0 else -1
             coeffs = sign * dct(TrigCoeff2Side[:, i]) / (ChebDeg + 1)
             ChebCoeffGrid[:, i] = coeffs
@@ -58,10 +58,11 @@ class ChebExpansionArray():
         return len(self.polynomials)
     
     def calcCoeffGrid(self, polynomials):
-        ChebCoeffGrid = np.zeros([self.ChebDeg + 1, self.TrigDeg + 1])
-        for i in range(self.TrigDeg + 1):
+        TrigDeg = len(polynomials) - 1
+        ChebCoeffGrid = np.zeros([self.ChebDeg + 1, TrigDeg + 1])
+        for i in range(TrigDeg + 1):
             ChebCoeffGrid[:, i] = polynomials[i].coef
-        return ChebCoeffGrid
+        return TrigDeg, ChebCoeffGrid
     
     def determineParity(self, polynomials):
         zeros = np.zeros(len(polynomials) // 2)
@@ -99,8 +100,8 @@ class ChebTrigExpansion():
 
         assert(not (TrigExpArr is None and GridVals is None and ChebExpArr is None))
 
-        if TrigExpArr is None:
-            if GridVals is not None:
+        if ChebExpArr is None:
+            if TrigExpArr is None:
                 assert(trig_type is not None and rho1D is not None)
                 TrigExpArr = TrigExpansionArray(GridVals = GridVals, trig_type = trig_type, parity = parity, rho1D = rho1D)
             else:
@@ -126,7 +127,52 @@ class ChebTrigExpansion():
             self.parity = ChebExpArr.parity
             self.ChebExpArr = ChebExpArr
 
-            self.TrigDeg, self.TrigCoeffGrid, self.TrigExpArr, self.GridVals = self._initialize_with_TrigExp(ChebExpArr)
+            self.TrigDeg, self.TrigCoeffGrid, self.TrigExpArr, self.GridVals = self._initialize_with_ChebExp(ChebExpArr)
+    
+    def __add__(self, other):
+        if isinstance(other, ChebTrigExpansion):
+            return ChebTrigExpansion(TrigExpArr = self.TrigExpArr + other.TrigExpArr)
+        elif isinstance(other, (TrigExpansion, int, float, np.integer, np.floating, list, np.ndarray)):
+            return ChebTrigExpansion(TrigExpArr = self.TrigExpArr + other)
+        else:
+            return NotImplemented
+        
+    def __radd__(self, obj):
+        """Handle addition when the instance is on the right side of the + operator."""
+        # Redirect to __add__ since addition is commutative
+        return self.__add__(obj)
+    
+    def __sub__(self, other):
+        if isinstance(other, ChebTrigExpansion):
+            return ChebTrigExpansion(TrigExpArr = self.TrigExpArr - other.TrigExpArr)
+        elif isinstance(other, (TrigExpansion, int, float, np.integer, np.floating, list, np.ndarray)):
+            return ChebTrigExpansion(TrigExpArr = self.TrigExpArr - other)
+        else:
+            return NotImplemented
+    
+    def __mul__(self, other):
+        if isinstance(other, ChebTrigExpansion):
+            return ChebTrigExpansion(TrigExpArr = self.TrigExpArr * other.TrigExpArr)
+        elif isinstance(other, (TrigExpansion, int, float, np.integer, np.floating, list, np.ndarray)):
+            return ChebTrigExpansion(TrigExpArr = self.TrigExpArr * other)
+        else:
+            return NotImplemented
+    
+    def __rmul__(self, obj):
+        """Handle multiplication when the instance is on the right side."""
+        # Call __mul__ with swapped order
+        return self.__mul__(obj)
+    
+    def __truediv__(self, other):
+        if isinstance(other, ChebTrigExpansion):
+            return ChebTrigExpansion(TrigExpArr = self.TrigExpArr / other.TrigExpArr)
+        elif isinstance(other, (TrigExpansion, int, float, np.integer, np.floating, list, np.ndarray)):
+            return ChebTrigExpansion(TrigExpArr = self.TrigExpArr / other)
+        else:
+            return NotImplemented
+    
+    def __pow__(self, exponent):
+        return ChebTrigExpansion(TrigExpArr = self.TrigExpArr ** exponent)
         
     def _initialize_with_TrigExp(self, TrigExpArr):
         
