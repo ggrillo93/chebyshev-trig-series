@@ -247,7 +247,7 @@ class sinExpansion(TrigExpansion):
     def __init__(self, coeffs=None, thetas=None, vals=None, deg=None, useDST=True):
         super().__init__(coeffs, thetas, vals, deg, useDST, trig_type='sin')
 
-class TrigExpansionArray:
+class TrigExpansionArray: # should add option to initialize with coefficient grid
     def __init__(self, GridVals = None, expansions = None, N = None, trig_type = None, deg = None, parity = None, rho1D = None):
         """
         Initialize the TrigExpansionArray with an optional list of sinExpansion or cosExpansion objects.
@@ -369,6 +369,15 @@ class TrigExpansionArray:
                 raise ValueError("Cannot add a scalar to a sine series")
             else:
                 return TrigExpansionArray(expansions = [exp + other for exp in self.expansions], rho1D = self.rho1D, parity = self.parity)
+        elif isinstance(other, (list, np.ndarray)) and all(isinstance(x, (int, float, np.integer, np.floating)) for x in other):
+            # Ensure the array length matches the length of expansions
+            if len(self.expansions) != len(other):
+                raise ValueError("The array of scalars must match the length of the expansions.")
+            if self.trig_type == 'sin':
+                raise ValueError("Cannot add scalars to a sine series.")
+            else:
+                # Add each scalar to the corresponding expansion
+                return TrigExpansionArray(expansions=[exp + scalar for exp, scalar in zip(self.expansions, other)], rho1D=self.rho1D)
         else:
             return NotImplemented
         
@@ -395,6 +404,14 @@ class TrigExpansionArray:
                 raise ValueError("Cannot subtract a scalar to a sine series")
             else:
                 return TrigExpansionArray(expansions = [exp - other for exp in self.expansions], rho1D = self.rho1D, parity = self.parity)
+        elif isinstance(other, (list, np.ndarray)) and all(isinstance(x, (int, float, np.integer, np.floating)) for x in other):
+            # Ensure the array length matches the length of expansions
+            if len(self.expansions) != len(other):
+                raise ValueError("The array of scalars must match the length of the expansions.")
+            if self.trig_type == 'sin':
+                raise ValueError("Cannot add scalars to a sine series.")
+            else:
+                return TrigExpansionArray(expansions=[exp - scalar for exp, scalar in zip(self.expansions, other)], rho1D=self.rho1D)
         else:
             return NotImplemented
 
@@ -411,6 +428,12 @@ class TrigExpansionArray:
                 return TrigExpansionArray(expansions = [exp1 * exp2 for exp1, exp2 in zip(self.expansions, other.expansions)], rho1D = self.rho1D)
         elif isinstance(other, (int, float, np.integer, np.floating)):
             return TrigExpansionArray(expansions = [exp * other for exp in self.expansions], rho1D = self.rho1D, parity = self.parity)
+        elif isinstance(other, (list, np.ndarray)) and all(isinstance(x, (int, float, np.integer, np.floating)) for x in other):
+            # Ensure the array length matches the length of expansions
+            if len(self.expansions) != len(other):
+                raise ValueError("The array of scalars must match the length of the expansions.")
+            else:
+                return TrigExpansionArray(expansions=[exp * scalar for exp, scalar in zip(self.expansions, other)], rho1D=self.rho1D)
         else:
             return NotImplemented
     
@@ -432,6 +455,12 @@ class TrigExpansionArray:
                 return TrigExpansionArray(expansions = [exp1 / exp2 for exp1, exp2 in zip(self.expansions, other.expansions)], rho1D = self.rho1D)
         elif isinstance(other, (int, float, np.integer, np.floating)):
             return TrigExpansionArray(expansions = [exp / other for exp in self.expansions], rho1D = self.rho1D, parity = self.parity)
+        elif isinstance(other, (list, np.ndarray)) and all(isinstance(x, (int, float, np.integer, np.floating)) for x in other):
+            # Ensure the array length matches the length of expansions
+            if len(self.expansions) != len(other):
+                raise ValueError("The array of scalars must match the length of the expansions.")
+            else:
+                return TrigExpansionArray(expansions=[exp / scalar for exp, scalar in zip(self.expansions, other)], rho1D=self.rho1D)
         else:
             return NotImplemented
 
@@ -441,8 +470,14 @@ class TrigExpansionArray:
         """
         if isinstance(exponent, (int, float, np.integer, np.floating)):
             return TrigExpansionArray(expansions = [exp ** exponent for exp in self.expansions], rho1D = self.rho1D)
+        elif isinstance(exponent, (list, np.ndarray)) and all(isinstance(x, (int, float, np.integer, np.floating)) for x in exponent):
+            # Ensure the array length matches the length of expansions
+            if len(self.expansions) != len(exponent):
+                raise ValueError("The array of scalars must match the length of the expansions.")
+            else:
+                return TrigExpansionArray(expansions=[exp ** scalar for exp, scalar in zip(self.expansions, exponent)], rho1D=self.rho1D)
         else:
-            raise ValueError("Exponent must be a number.")
+            return NotImplemented
         
     def __getitem__(self, index):
         """
