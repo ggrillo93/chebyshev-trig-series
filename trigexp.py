@@ -32,7 +32,8 @@ class TrigExpansion:
             return coeffs, len(coeffs) - 1
 
         if useFFT:
-            if type(thetas) == type(None):
+            vals, thetas = self._enforce_periodicity(vals, thetas)
+            if thetas is None:
                 fftCoeff = self._perform_fft(vals)
             else:
                 assert len(thetas) == len(vals), "Values for fit need to be equal to number of points"
@@ -42,12 +43,20 @@ class TrigExpansion:
         else:
             assert len(thetas) == len(vals), "Values for fit need to be equal to number of points"
             return self.fit(thetas, vals, deg), deg
+        
+    def _enforce_periodicity(self, vals, thetas):
+        sign = 1 if self.trig_type == 'cos' else -1
+        if not np.allclose(vals[0], sign * vals[-1]):
+            vals = np.concatenate((vals, sign * np.flip(vals)))
+            if thetas is not None:
+                thetas = np.concatenate((thetas, thetas + np.pi))
+        return vals, thetas
 
     def _perform_fft(self, vals):
         """ Uniform FFT """
         if self.trig_type == 'cos':
             coeff = dct(vals) / len(vals)
-            coeff[0] *= 0.5
+            # coeff[0] *= 0.5
             return coeff[::2]
         else:
             coeff = dst(vals) / len(vals)
@@ -60,7 +69,7 @@ class TrigExpansion:
         left, right = np.split(fft, 2)
         if self.trig_type == 'cos':
             coeff = 2 * np.real(right) / N
-            coeff[0] *= 0.5
+            # coeff[0] *= 0.5
         else:
             coeff = -2 * np.flip(np.imag(left)) / N
         return coeff
@@ -73,7 +82,8 @@ class TrigExpansion:
                 return sinExpansion(coeffs=self.coeffs + obj.coeffs)
         elif isinstance(obj, (int, float, np.integer, np.floating)) and self.trig_type == 'cos':
             newCoeff = np.copy(self.coeffs)
-            newCoeff[0] += obj
+            # newCoeff[0] += obj
+            newCoeff[0] += 2 * obj
             return cosExpansion(coeffs=newCoeff)
         return NotImplemented
     
@@ -90,7 +100,8 @@ class TrigExpansion:
                 return sinExpansion(coeffs=self.coeffs - obj.coeffs)
         elif isinstance(obj, (int, float, np.integer, np.floating)) and self.trig_type == 'cos':
             newCoeff = np.copy(self.coeffs)
-            newCoeff[0] -= obj
+            # newCoeff[0] -= obj
+            newCoeff[0] -= 2 * obj
             return cosExpansion(coeffs=newCoeff)
         return NotImplemented
 
@@ -161,7 +172,8 @@ class TrigExpansion:
         assert M >= deg + 1, "Number of values needs to be at least deg + 1"
         A = np.zeros((M, deg + 1))
         if self.trig_type == 'cos':
-            A[:, 0] = 1
+            # A[:, 0] = 1
+            A[:, 0] = 0.5
             for i in range(deg):
                 A[:, i + 1] = np.cos((i + 1) * thetas)
         else:
@@ -173,7 +185,8 @@ class TrigExpansion:
     def evalGrid(self, thetas):
         res = 0
         if self.trig_type == 'cos':
-            res += self.coeffs[0]
+            # res += self.coeffs[0]
+            res += 0.5 * self.coeffs[0]
             for i in range(1, len(self.coeffs)):
                 res += self.coeffs[i] * np.cos(i * thetas)
         else:
@@ -185,7 +198,7 @@ class TrigExpansion:
         if self.trig_type == 'cos':
             newCoeff = np.zeros(2 * (self.deg + 1))
             newCoeff[::2] = np.copy(self.coeffs)
-            newCoeff[0] *= 2
+            # newCoeff[0] *= 2
             result = idct(newCoeff) * len(newCoeff)
             return result
         else:
@@ -197,7 +210,8 @@ class TrigExpansion:
     def eval(self, theta):
         res = 0
         if self.trig_type == 'cos':
-            res += self.coeffs[0]
+            # res += self.coeffs[0]
+            res += 0.5 * self.coeffs[0]
             for i in range(1, len(self.coeffs)):
                 res += self.coeffs[i] * np.cos(i * theta)
         else:
@@ -216,7 +230,7 @@ class TrigExpansion:
                 newCoeffs[m] = m * self.coeffs[m-1]
             return cosExpansion(coeffs=newCoeffs)
 
-    def integralContour(self):
+    def contourIntegral(self):
         return 2 * np.pi * self.coeffs[0]
     
     def copy(self):
