@@ -1,4 +1,4 @@
-from trigexp import *
+from .trigexp import *
 from numpy.polynomial.chebyshev import Chebyshev
 
 class ChebExpansionArray():

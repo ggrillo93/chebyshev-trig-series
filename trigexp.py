@@ -230,8 +230,8 @@ class TrigExpansion:
                 newCoeffs[m] = m * self.coeffs[m-1]
             return cosExpansion(coeffs=newCoeffs)
 
-    def contourIntegral(self):
-        return 2 * np.pi * self.coeffs[0]
+    def integralAverage(self):
+        return np.pi * self.coeffs[0]
     
     def copy(self):
         if self.trig_type == 'cos':
