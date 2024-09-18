@@ -506,7 +506,7 @@ class TrigExpansionArray: # should add option to initialize with coefficient gri
 
         coeffs2Side = self.twoSided()
         newCoeffGrid = np.copy(self.coeffGrid) * 0
-        ddRho = FinDiff(0, self.rho1D, order, acc = acc)
+        ddRho = FinDiff(0, np.concatenate((-np.flip(self.rho1D), self.rho1D)), order, acc = acc)
         for i in range(self.deg + 1):
             newCoeffGrid[:, i] = ddRho(coeffs2Side[:, i])[self.N:]
         selftype = cosExpansion if self.trig_type == 'cos' else sinExpansion
