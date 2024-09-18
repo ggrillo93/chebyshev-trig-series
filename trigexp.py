@@ -3,6 +3,7 @@ from scipy.fft import dct, dst, idct, idst
 from nfft import nfft_adjoint
 from matplotlib import pyplot as plt
 from numpy.polynomial.polynomial import polyfit
+from findiff import FinDiff
 
 class TrigExpansion:
     """ useFFT = True is much faster for evenly spaced samples and slower up to nTheta ~ 50 for unevenly spaced samples """
@@ -229,9 +230,22 @@ class TrigExpansion:
             for m in range(1, self.deg + 1):
                 newCoeffs[m] = m * self.coeffs[m-1]
             return cosExpansion(coeffs=newCoeffs)
+        
+    def defIntegral(self):
+        if self.trig_type == 'sin':
+            m = np.arange(len(self.coeffs)) + 1
+            intExp = cosExpansion(coeffs = -self.coeffs / m)
+            return lambda theta1, theta0: intExp.eval(theta1) - intExp.eval(theta0)
+        else:
+            m = np.arange(len(self.coeffs) - 1) + 1
+            intExp = sinExpansion(coeffs = self.coeffs[1:] / m)
+            return lambda theta1, theta0: 0.5 * self.coeffs[0] * (theta1 - theta0) + intExp.eval(theta1) - intExp.eval(theta0)
 
     def integralAverage(self):
-        return np.pi * self.coeffs[0]
+        if self.trig_type == 'cos':
+            return np.pi * self.coeffs[0]
+        else:
+            return 0
     
     def copy(self):
         if self.trig_type == 'cos':
@@ -487,6 +501,19 @@ class TrigExpansionArray: # should add option to initialize with coefficient gri
     
     def thetaDerivative(self): # could implement more derivatives here
         return TrigExpansionArray(expansions = [exp.derivative() for exp in self.expansions], rho1D = self.rho1D, parity = 'odd' if self.parity == 'even' else 'even')
+    
+    def spatialDerivativeFD(self, acc = 4, order = 1):
+
+        coeffs2Side = self.twoSided()
+        newCoeffGrid = np.copy(self.coeffGrid) * 0
+        ddRho = FinDiff(0, self.rho1D, order, acc = acc)
+        for i in range(self.deg + 1):
+            newCoeffGrid[:, i] = ddRho(coeffs2Side[:, i])[self.N:]
+        selftype = cosExpansion if self.trig_type == 'cos' else sinExpansion
+        newExp = np.zeros(self.N, dtype = selftype)
+        for i in range(self.N):
+            newExp[i] = selftype(coeffs = newCoeffGrid[i])
+        return TrigExpansionArray(expansions = newExp, trig_type = self.trig_type, parity = 'odd' if self.parity == 'even' else 'odd', rho1D = self.rho1D)
     
     def calcCoeffGrid(self):
 
