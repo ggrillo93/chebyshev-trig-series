@@ -4,13 +4,14 @@ from nfft import nfft_adjoint
 from matplotlib import pyplot as plt
 from numpy.polynomial.polynomial import polyfit
 from findiff import FinDiff
+from scipy.interpolate import InterpolatedUnivariateSpline, RectBivariateSpline
 
 class TrigExpansion:
     """ useFFT = True is much faster for evenly spaced samples and slower up to nTheta ~ 50 for unevenly spaced samples """
-    def __init__(self, coeffs=None, thetas=None, vals=None, deg=None, useFFT=True, trig_type='cos'):
+    def __init__(self, coeffs=None, thetas=None, vals=None, deg=None, useFFT=True, trig_type='cos', check_periodicity = True):
         assert trig_type in ['cos', 'sin'], "trig_type must be 'cos' or 'sin'"
         self.trig_type = trig_type
-        self.coeffs, self.deg = self._initialize_coeffs(coeffs, thetas, vals, deg, useFFT)
+        self.coeffs, self.deg = self._initialize_coeffs(coeffs, thetas, vals, deg, useFFT, check_periodicity)
 
     @classmethod
     def zero_expansion(cls, deg=0):
@@ -28,12 +29,13 @@ class TrigExpansion:
             coeffs[0] = 1
         return cls(coeffs=coeffs)
 
-    def _initialize_coeffs(self, coeffs, thetas, vals, deg, useFFT):
+    def _initialize_coeffs(self, coeffs, thetas, vals, deg, useFFT, check_periodicity):
         if coeffs is not None:
             return coeffs, len(coeffs) - 1
 
         if useFFT:
-            vals, thetas = self._enforce_periodicity(vals, thetas)
+            if check_periodicity:
+                vals, thetas = self._enforce_periodicity(vals, thetas)
             if thetas is None:
                 fftCoeff = self._perform_fft(vals)
             else:
@@ -254,55 +256,77 @@ class TrigExpansion:
             return sinExpansion(coeffs = self.coeffs)
 
 class cosExpansion(TrigExpansion):
-    def __init__(self, coeffs=None, thetas=None, vals=None, deg=None, useDCT=True):
-        super().__init__(coeffs, thetas, vals, deg, useDCT, trig_type='cos')
+    def __init__(self, coeffs=None, thetas=None, vals=None, deg=None, useDCT=True, check_periodicity = True):
+        super().__init__(coeffs, thetas, vals, deg, useDCT, trig_type='cos', check_periodicity=check_periodicity)
 
 class sinExpansion(TrigExpansion):
-    def __init__(self, coeffs=None, thetas=None, vals=None, deg=None, useDST=True):
-        super().__init__(coeffs, thetas, vals, deg, useDST, trig_type='sin')
+    def __init__(self, coeffs=None, thetas=None, vals=None, deg=None, useDST=True, check_periodicity = True):
+        super().__init__(coeffs, thetas, vals, deg, useDST, trig_type='sin', check_periodicity=check_periodicity)
 
-class TrigExpansionArray: # should add option to initialize with coefficient grid
-    def __init__(self, GridVals = None, expansions = None, N = None, trig_type = None, deg = None, parity = None, rho1D = None):
+class TrigExpansionArray: # should add option to set qty name, also should change N to nRho
+    def __init__(self, GridVals = None, expansions = None, coeffGrid = None, nRho = None, trig_type = None, deg = None, parities = None, rho1D = None):
         """
         Initialize the TrigExpansionArray with an optional list of sinExpansion or cosExpansion objects.
         """
-        assert(parity is None or parity == 'even' or parity == 'odd')
+        assert(parities is None or (len(parities) == 2 and (parities[0] == 'even' or parities[0] == 'odd') \
+                                    and (parities[1] == 'even' or parities[1] == 'odd')))
 
-        if expansions is None and GridVals is None:
-            assert(N is not None and trig_type is not None and deg is not None and parity is None)
-            self.N = N
+        if expansions is None and GridVals is None and coeffGrid is None:
+            assert(nRho is not None and trig_type is not None and deg is not None and parities is None)
+            self.nRho = nRho
             self.trig_type = trig_type
             self.deg = deg
             self.expansions = self._initialize_empty()
-            self.coeffGrid = np.zeros([self.N, self.deg + 1])
-            self.parity = None
+            self.coeffGrid = np.zeros([self.nRho, self.deg + 1])
+            self.parities = None
             self.rho1D = None
         else:
             assert(rho1D is not None)
             assert(not np.allclose(rho1D[0], 0)) # can relax this at a later time
             self.rho1D = np.copy(rho1D)
-            if GridVals is None and expansions is not None:
-                self.expansions = np.array(expansions)
-                self.trig_type, self.deg = self._validate_type()
-                self.N = len(expansions)
-                self.GridVals = self.eval_all_grid()
-            else:
+            self.nRho = len(rho1D)
+            if expansions is not None:
+                assert(len(expansions) == self.nRho)
+                self.expansions, self.trig_type, self.deg = self._initialize_with_expansions(expansions)
+                self.coeffGrid = self.calcCoeffGrid()
+                self.GridVals = None
+            elif GridVals is not None:
                 assert(trig_type is not None)
-                self.N = len(GridVals)
+                assert(len(GridVals) == self.nRho)
                 self.trig_type = trig_type
                 self.expansions, self.GridVals = self._initialize_with_grid(GridVals)
                 self.deg = self.expansions[0].deg
-            self.coeffGrid = self.calcCoeffGrid()
-            if parity is None:
-                self.parity = self.calcParity()
+                self.coeffGrid = self.calcCoeffGrid()
+            elif coeffGrid is not None:
+                assert(trig_type is not None)
+                assert(len(coeffGrid) == self.nRho)
+                self.trig_type = trig_type
+                self.expansions, self.coeffGrid = self._initialize_with_coeffs(coeffGrid)
+                self.deg = self.expansions[0].deg
+                self.GridVals = None
+            
+            self.nTheta = 2 * (self.deg + 1)
+            self.theta1D = np.array([2 * (i + 0.5) * np.pi / self.nTheta for i in range(self.nTheta)])
+
+            # initialize other quantities
+            self.twoSidedRho = None
+            self.twoSidedCoeff = None
+            self.twoSidedGridVals = None
+            self.oppParities = None
+            self.interp = None
+
+            if parities is None:
+                self.parities = self.calcParities()
             else:
-                self.parity = parity
+                self.parities = parities
+
+    # Initialization functions
 
     def _initialize_empty(self):
         if self.trig_type == 'cos':
-            return np.array([cosExpansion.zero_expansion(deg = self.deg) for i in range(self.N)])
+            return np.array([cosExpansion.zero_expansion(deg = self.deg) for i in range(self.nRho)])
         else:
-            return np.array([sinExpansion.zero_expansion(deg = self.deg) for i in range(self.N)])
+            return np.array([sinExpansion.zero_expansion(deg = self.deg) for i in range(self.nRho)])
     
     def _initialize_with_grid(self, GridVals):
 
@@ -312,58 +336,39 @@ class TrigExpansionArray: # should add option to initialize with coefficient gri
         elif self.trig_type == 'sin' and not np.allclose(GridVals[:, 0], -GridVals[:, -1]):
             GridVals = np.hstack((GridVals, -np.fliplr(GridVals)))
         
-        if self.trig_type == 'cos':
-            expansions = np.zeros(self.N, dtype = cosExpansion)
-            for i in range(self.N):
-                expansions[i] = cosExpansion(vals = GridVals[i])
-        else:
-            expansions = np.zeros(self.N, dtype = sinExpansion)
-            for i in range(self.N):
-                expansions[i] = sinExpansion(vals = GridVals[i])
+        selftype = cosExpansion if self.trig_type == 'cos' else sinExpansion
+        expansions = np.zeros(self.nRho, dtype = selftype)
+        for i in range(self.nRho):
+            expansions[i] = selftype(vals = GridVals[i], check_periodicity=False)
         
         return expansions, GridVals
 
-    def _validate_type(self):
+    def _initialize_with_expansions(self, expansions):
         """
         Ensure all expansions are of the same type (all sinExpansion or all cosExpansion).
-        Returns the type if valid, otherwise raises an error.
         """
-        trig_type = self.expansions[0].trig_type
-        deg = self.expansions[0].deg
-        if any(exp.trig_type != trig_type for exp in self.expansions):
+        trig_type = expansions[0].trig_type
+        deg = expansions[0].deg
+        if any(exp.trig_type != trig_type for exp in expansions):
             raise ValueError("All expansions must be of the same trigonometric type.")
-        if any(exp.deg != deg for exp in self.expansions):
+        if any(exp.deg != deg for exp in expansions):
             raise ValueError("All expansions must have the same degree.")
-        return trig_type, deg
+        return expansions, trig_type, deg
+    
+    def _initialize_with_coeffs(self, coeffGrid):
+        selftype = cosExpansion if self.trig_type == 'cos' else sinExpansion
+        expansions = np.zeros(self.nRho, dtype = selftype)
+        for i in range(self.nRho):
+            expansions[i] = selftype(coeffs = coeffGrid[i])
+        return expansions, coeffGrid
+
+    # Basic operations
 
     def __len__(self):
         """
         Get the number of expansions in the array.
         """
         return len(self.expansions)
-
-    def eval_all(self, theta):
-        """
-        Evaluate all expansions at a given angle theta.
-        Returns a list of results.
-        """
-        return np.array([exp.eval(theta) for exp in self.expansions])
-
-    def eval_all_grid(self, thetas = None):
-        """
-        Evaluate all expansions on a grid of theta values.
-        Returns a list of results.
-        """
-
-        if thetas is None:
-            result = np.array([exp.evalGridFFT() for exp in self.expansions])
-        else:
-            if thetas.ndim == 1:
-                result = np.array([exp.evalGrid(thetas) for exp in self.expansions])
-            else:
-                result = np.array([self.expansions[i].evalGrid(thetas[i]) for i in range(self.N)])
-        
-        return result
 
     def __add__(self, other):
         """
@@ -382,7 +387,7 @@ class TrigExpansionArray: # should add option to initialize with coefficient gri
             if self.trig_type == 'sin':
                 raise ValueError("Cannot add a scalar to a sine series")
             else:
-                return TrigExpansionArray(expansions = [exp + other for exp in self.expansions], rho1D = self.rho1D, parity = self.parity)
+                return TrigExpansionArray(expansions = [exp + other for exp in self.expansions], rho1D = self.rho1D, parities = self.getParities())
         elif isinstance(other, (list, np.ndarray)) and all(isinstance(x, (int, float, np.integer, np.floating)) for x in other):
             # Ensure the array length matches the length of expansions
             if len(self.expansions) != len(other):
@@ -404,30 +409,7 @@ class TrigExpansionArray: # should add option to initialize with coefficient gri
         """
         Subtract another TrigExpansionArray or a scalar value.
         """
-        if isinstance(other, TrigExpansionArray):
-            if len(self.expansions) != len(other.expansions):
-                raise ValueError("Arrays must be of the same length to add.")
-            elif self.trig_type != other.trig_type:
-                raise ValueError("Cannot subract two different types of expansions.")
-            elif not np.allclose(self.rho1D, other.rho1D):
-                raise ValueError("Cannot subtract two expansions sampled at different radial points.")
-            else:
-                return TrigExpansionArray(expansions = [exp1 - exp2 for exp1, exp2 in zip(self.expansions, other.expansions)], rho1D = self.rho1D)
-        elif isinstance(other, (int, float, np.integer, np.floating)):
-            if self.trig_type == 'sin':
-                raise ValueError("Cannot subtract a scalar to a sine series")
-            else:
-                return TrigExpansionArray(expansions = [exp - other for exp in self.expansions], rho1D = self.rho1D, parity = self.parity)
-        elif isinstance(other, (list, np.ndarray)) and all(isinstance(x, (int, float, np.integer, np.floating)) for x in other):
-            # Ensure the array length matches the length of expansions
-            if len(self.expansions) != len(other):
-                raise ValueError("The array of scalars must match the length of the expansions.")
-            if self.trig_type == 'sin':
-                raise ValueError("Cannot add scalars to a sine series.")
-            else:
-                return TrigExpansionArray(expansions=[exp - scalar for exp, scalar in zip(self.expansions, other)], rho1D=self.rho1D)
-        else:
-            return NotImplemented
+        return self + -1 * other
 
     def __mul__(self, other):
         """
@@ -498,72 +480,221 @@ class TrigExpansionArray: # should add option to initialize with coefficient gri
         Access an expansion by index.
         """
         return self.expansions[index]
-    
-    def thetaDerivative(self): # could implement more derivatives here
-        return TrigExpansionArray(expansions = [exp.derivative() for exp in self.expansions], rho1D = self.rho1D, parity = 'odd' if self.parity == 'even' else 'even')
-    
-    def spatialDerivativeFD(self, acc = 4, order = 1):
 
-        coeffs2Side = self.twoSided()
-        newCoeffGrid = np.copy(self.coeffGrid) * 0
-        ddRho = FinDiff(0, np.concatenate((-np.flip(self.rho1D), self.rho1D)), order, acc = acc)
-        for i in range(self.deg + 1):
-            newCoeffGrid[:, i] = ddRho(coeffs2Side[:, i])[self.N:]
-        selftype = cosExpansion if self.trig_type == 'cos' else sinExpansion
-        newExp = np.zeros(self.N, dtype = selftype)
-        for i in range(self.N):
-            newExp[i] = selftype(coeffs = newCoeffGrid[i])
-        return TrigExpansionArray(expansions = newExp, trig_type = self.trig_type, parity = 'odd' if self.parity == 'even' else 'odd', rho1D = self.rho1D)
+    # Calling and evaluation functions
+
+    def __call__(self, rho, theta): # need to thoroughly test this
+        """ Don't call with rho = self.rho1D and theta = self.theta1D, just use self.getGridVals() in that case """
+
+        if isinstance(rho, (list, np.ndarray)):
+            rho = np.array(rho)
+            assert(rho.ndim == 1)
+            assert(np.max(rho) <= np.max(self.rho1D) and np.min(rho) >= 0)
+        elif isinstance(rho, (int, float, np.integer, np.floating)):
+            assert(rho <= np.max(self.rho1D) and rho >= 0)
+        else:
+            raise ValueError('Rho needs to be a scalar or an array')
+
+        if isinstance(theta, (int, float, np.integer, np.floating)):
+            assert(theta <= 2 * np.pi and theta >= 0)
+        elif isinstance(theta, (list, np.ndarray)):
+            theta = np.array(theta)
+            assert(theta.ndim == 1)
+        else:
+            raise ValueError('Theta needs to be a scalar or an array')
+        
+        interp = self.getInterp()
+        return interp(rho, theta)
+        
+    def eval_all(self, theta):
+        """
+        Evaluate all expansions at a given angle theta.
+        Returns a list of results.
+        """
+        return np.array([exp.eval(theta) for exp in self.expansions])
+
+    def eval_all_grid(self, thetas = None):
+        """
+        Evaluate all expansions on a grid of theta values.
+        Returns a list of results.
+        """
+
+        if thetas is None:
+            result = np.array([exp.evalGridFFT() for exp in self.expansions])
+        else:
+            if thetas.ndim == 1:
+                result = np.array([exp.evalGrid(thetas) for exp in self.expansions])
+            else:
+                result = np.array([self.expansions[i].evalGrid(thetas[i]) for i in range(self.N)])
+        
+        return result
+        
+    # Get functions
+
+    def getGridVals(self):
+        if self.GridVals is None:
+            self.GridVals = self.eval_all_grid()
+        return self.GridVals
+    
+    def getCoeffGrid(self):
+        if self.coeffGrid is None:
+            self.coeffGrid = self.calcCoeffGrid()
+        return self.coeffGrid
+    
+    def getOppositeParities(self):
+        if self.oppParities is None:
+            parities = self.getParities()
+            oppParities = ()
+            for par in parities:
+                if par == 'even':
+                    oppParities += ('odd',)
+                else:
+                    oppParities += ('even',)
+            self.oppParities = oppParities
+        return self.oppParities
+    
+    def getTwoSidedCoeff(self):
+        if self.twoSidedCoeff is None:
+            self.twoSidedCoeff = self.calcTwoSidedCoeff()
+        return self.twoSidedCoeff
+    
+    def getTwoSidedRho(self):
+        if self.twoSidedRho is None:
+            self.twoSidedRho = np.concatenate((-np.flip(self.rho1D), self.rho1D))
+        return self.twoSidedRho
+    
+    def getTwoSidedGridVals(self):
+        if self.twoSidedGridVals is None:
+            self.twoSidedGridVals = self.calcTwoSidedGridVals(self.getGridVals())
+        return self.twoSidedGridVals
+    
+    def getParities(self):
+        if self.parities is None:
+            self.parities = self.calcParities()
+        return self.parities
+    
+    def getInterp(self):
+        if self.interp is None:
+            self.interp = RectBivariateSpline(self.getTwoSidedRho(), self.theta1D, self.getTwoSidedGridVals(), kx = 5, ky = 5)
+        return self.interp
+
+    # Calculus
+    
+    def thetaDer(self): # could implement more derivatives here
+        parities = self.getParities()
+        newParities = np.copy(parities)
+        newParities[0] = 'odd' if parities[0] == 'even' else 'odd'
+
+        return TrigExpansionArray(expansions = [exp.derivative() for exp in self.expansions], rho1D = self.rho1D, parities = newParities)
+    
+    def rhoDerFD(self, order = 1, acc = 4):
+
+        coeffs2Side = self.getTwoSidedCoeff()
+        newCoeffGrid = np.copy(self.getCoeffGrid()) * 0
+        rho2Side = self.getTwoSidedRho()
+        ddRho = FinDiff(0, rho2Side, order, acc = acc)
+        newCoeffGrid = ddRho(coeffs2Side)[self.nRho:]
+        newParities = self.getOppositeParities() if order % 2 == 1 else self.parities
+
+        return TrigExpansionArray(coeffGrid = newCoeffGrid, trig_type = self.trig_type, parities = newParities, rho1D = self.rho1D)
+    
+    def integralAverage(self, derOrder = 0, acc = 4):
+        if self.trig_type == 'sin' or np.allclose(self.getCoeffGrid[:, 0], np.zeros(self.nRho)):
+            return np.zeros(self.nRho)
+        else:
+            parities = self.getParities()
+            sign = 1 if parities[0] == 'even' else -1
+            coeffGrid = self.getCoeffGrid()
+            firstHarm = coeffGrid[:, 0]
+            if derOrder == 0:
+                return np.pi * firstHarm
+            else:
+                firstHarm2Side = np.concatenate((sign * np.flip(firstHarm), firstHarm))
+                rho2Side = self.getTwoSidedRho()
+                ddRho = FinDiff(0, rho2Side, derOrder, acc = acc)
+                return ddRho(firstHarm2Side)[self.nRho:]
+    
+    # One-time calculation functions
     
     def calcCoeffGrid(self):
 
-        coeffGrid = np.zeros([self.N, self.deg + 1])
-        for i in range(self.N):
+        coeffGrid = np.zeros([self.nRho, self.deg + 1])
+        for i in range(self.nRho):
             coeffGrid[i] = self.expansions[i].coeffs
         
         return coeffGrid
 
-    def twoSided(self): # assumes magnetic axis is not included, could add this case later
+    def calcTwoSidedCoeff(self): # assumes magnetic axis is not included, could add this case later
         """ Constructs two sided version of coefficients of expansion array, multiplying coefficients according to parity """
 
-        coeffs2Side = np.vstack((np.flipud(self.coeffGrid), self.coeffGrid))
+        coeffGrid = self.getCoeffGrid()
+        coeffs2Side = np.vstack((np.flipud(coeffGrid), coeffGrid))
+        parities = self.getParities()
 
         mult = np.ones(self.deg + 1)
-        if self.parity == 'even':
+        if parities[0] == 'even':
             mult[1::2] = -1
         else:
             mult[::2] = -1
         
-        for i in range(self.N):
+        for i in range(self.nRho):
             coeffs2Side[i] *= mult
 
         return coeffs2Side
     
-    def calcParity(self, printSums = False):
-        firstHarm = self.coeffGrid[:, 0]
-        if not np.allclose(firstHarm, np.zeros(len(firstHarm))):
-            coeff = polyfit(self.rho1D[:5], firstHarm[:5], 3)
-            even = sum(np.abs(coeff[::2]))
-            odd = sum(np.abs(coeff[1::2]))
-            parity = 'even' if even > odd else 'odd'
-        else:
-            secondHarm = self.coeffGrid[:, 1]
-            coeff = polyfit(self.rho1D[:5], secondHarm[:5], 3)
-            even = sum(np.abs(coeff[::2]))
-            odd = sum(np.abs(coeff[1::2]))
-            parity = 'odd' if even > odd else 'even'
-        if printSums:
-            print([even, odd])
+    def calcTwoSidedGridVals(self, GridVals):
+        nRho, nTheta = GridVals.shape
+        twoSidedGridVals = np.zeros([2 * nRho, nTheta // 2])
+        parities = self.getParities()
+        sign = -1 if parities[1] == 'even' else 1
+        for i in range(nTheta // 2):
+            right = GridVals[:, i]
+            left = sign * np.flip(GridVals[:, i + nTheta // 2])
+            twoSidedGridVals[:, i] = np.concatenate((left, right))
+        sign = -1 if self.trig_type == 'sin' else 1
+        twoSidedGridVals = np.hstack((twoSidedGridVals, sign * np.fliplr(twoSidedGridVals)))
+        return twoSidedGridVals
+    
+    def calcParityArr(self, rho1D, arr):
+        """ Determines the parity of an array of values by fitting a polynomial to the first five points """
+        assert(len(rho1D) == len(arr) and len(rho1D) >= 5)
+        coeff = polyfit(rho1D[:5], arr[:5], 3)
+        even = sum(np.abs(coeff[::2]))
+        odd = sum(np.abs(coeff[1::2]))
+        parity = 'even' if even > odd else 'odd'
         return parity
     
+    def calcParities(self):
+        """ This calculates the parity of the first harmonic and the parity of the grid values. For the harmonic case, if the first harmonic is zero, 
+        it calculates the parity of the second harmonic; the first harmonic's parity is then its opposite"""
+        # coefficients
+        coeffGrid = self.getCoeffGrid()
+        firstHarm = coeffGrid[:, 0]
+        if not np.allclose(firstHarm, np.zeros(len(firstHarm))):
+            coeffParity = self.calcParityArr(self.rho1D, firstHarm)
+        else:
+            secondHarm = coeffGrid[:, 1]
+            parity2 = self.calcParityArr(self.rho1D, secondHarm)
+            coeffParity = 'odd' if parity2 == 'even' else 'even'
+        # grid values
+        GridVals = self.getGridVals()
+        firstCol = GridVals[:, 0]
+        if not np.allclose(firstCol, np.zeros(self.nRho)):
+            valsParity = self.calcParityArr(self.rho1D, firstCol - firstCol[0])
+        else:
+            valsParity = self.calcParityArr(self.rho1D, GridVals[:, 1] - GridVals[0, 1]) # hopefully second column will not be a bunch of zeros too
+        return (coeffParity, valsParity)
+    
+    # Plotting
+            
     def plotCoeffs(self, nHarm = 5, rhoLim = 1, twoSided = True):
 
         if twoSided:
-            coeffs = self.twoSided()
-            rho = np.concatenate((-np.flip(self.rho1D), self.rho1D))
+            coeffs = self.getTwoSidedCoeff()
+            rho = self.getTwoSidedRho()
             idx = np.where((rho <= rhoLim) & (rho >= -rhoLim))
         else:
-            coeffs = self.coeffGrid
+            coeffs = self.getCoeffGrid()
             rho = self.rho1D
             idx = np.where((self.rho1D <= rhoLim))
 
@@ -580,4 +711,27 @@ class TrigExpansionArray: # should add option to initialize with coefficient gri
         ax[-1].set_xlabel(r'$\rho$')
 
         plt.tight_layout()
+        return
+    
+    def plotGridVals(self, figsize = (5, 5)):
+        
+        GridVals = self.getGridVals()
+        fig = plt.figure(figsize = figsize)
+        plt.imshow(GridVals, extent = (0, 1, 1, 0))
+        plt.colorbar()
+        plt.xlabel(r'$\frac{\theta}{2 \pi}$')
+        plt.ylabel(r'$\frac{\rho}{\rho_{max}}$')
+
+        return
+    
+    def plotSingleSurface(self, idx, figsize = (3.5, 5)):
+
+        assert(idx < self.nRho)
+
+        GridVals = self.getGridVals()
+        fig = plt.figure(figsize = figsize)
+        plt.plot(self.theta1D, GridVals[idx])
+        plt.xlabel(r'$\theta$')
+        plt.ylabel(r'$M(\rho = $' + str(np.around(self.rho1D[idx], 2)) + r'$)$')
+        plt.grid()
         return
