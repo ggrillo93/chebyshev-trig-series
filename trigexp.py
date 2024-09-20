@@ -423,7 +423,7 @@ class TrigExpansionArray: # should add option to set qty name, also should chang
             else:
                 return TrigExpansionArray(expansions = [exp1 * exp2 for exp1, exp2 in zip(self.expansions, other.expansions)], rho1D = self.rho1D)
         elif isinstance(other, (int, float, np.integer, np.floating)):
-            return TrigExpansionArray(expansions = [exp * other for exp in self.expansions], rho1D = self.rho1D, parity = self.parity)
+            return TrigExpansionArray(expansions = [exp * other for exp in self.expansions], rho1D = self.rho1D, parities = self.parities)
         elif isinstance(other, (list, np.ndarray)) and all(isinstance(x, (int, float, np.integer, np.floating)) for x in other):
             # Ensure the array length matches the length of expansions
             if len(self.expansions) != len(other):
@@ -450,7 +450,7 @@ class TrigExpansionArray: # should add option to set qty name, also should chang
             else:
                 return TrigExpansionArray(expansions = [exp1 / exp2 for exp1, exp2 in zip(self.expansions, other.expansions)], rho1D = self.rho1D)
         elif isinstance(other, (int, float, np.integer, np.floating)):
-            return TrigExpansionArray(expansions = [exp / other for exp in self.expansions], rho1D = self.rho1D, parity = self.parity)
+            return TrigExpansionArray(expansions = [exp / other for exp in self.expansions], rho1D = self.rho1D, parities = self.parities)
         elif isinstance(other, (list, np.ndarray)) and all(isinstance(x, (int, float, np.integer, np.floating)) for x in other):
             # Ensure the array length matches the length of expansions
             if len(self.expansions) != len(other):
@@ -581,11 +581,8 @@ class TrigExpansionArray: # should add option to set qty name, also should chang
     # Calculus
     
     def thetaDer(self): # could implement more derivatives here
-        parities = self.getParities()
-        newParities = np.copy(parities)
-        newParities[0] = 'odd' if parities[0] == 'even' else 'odd'
 
-        return TrigExpansionArray(expansions = [exp.derivative() for exp in self.expansions], rho1D = self.rho1D, parities = newParities)
+        return TrigExpansionArray(expansions = [exp.derivative() for exp in self.expansions], rho1D = self.rho1D)
     
     def rhoDerFD(self, order = 1, acc = 4):
 
