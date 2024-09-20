@@ -609,7 +609,7 @@ class TrigExpansionArray: # should add option to set qty name, also should chang
                 firstHarm2Side = np.concatenate((sign * np.flip(firstHarm), firstHarm))
                 rho2Side = self.getTwoSidedRho()
                 ddRho = FinDiff(0, rho2Side, derOrder, acc = acc)
-                return ddRho(firstHarm2Side)[self.nRho:]
+                return np.pi * ddRho(firstHarm2Side)[self.nRho:]
     
     # One-time calculation functions
     
