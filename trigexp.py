@@ -525,7 +525,7 @@ class TrigExpansionArray: # should add option to set qty name, also should chang
             if thetas.ndim == 1:
                 result = np.array([exp.evalGrid(thetas) for exp in self.expansions])
             else:
-                result = np.array([self.expansions[i].evalGrid(thetas[i]) for i in range(self.N)])
+                result = np.array([self.expansions[i].evalGrid(thetas[i]) for i in range(self.nRho)])
         
         return result
         
