@@ -596,16 +596,16 @@ class TrigExpansionArray: # should add option to set qty name, also should chang
         return TrigExpansionArray(coeffGrid = newCoeffGrid, trig_type = self.trig_type, parities = newParities, rho1D = self.rho1D)
     
     def integralAverage(self, derOrder = 0, acc = 4):
-        if self.trig_type == 'sin' or np.allclose(self.getCoeffGrid[:, 0], np.zeros(self.nRho)):
+        coeffGrid = self.getCoeffGrid()
+        if self.trig_type == 'sin' or np.allclose(coeffGrid[:, 0], np.zeros(self.nRho)):
             return np.zeros(self.nRho)
         else:
-            parities = self.getParities()
-            sign = 1 if parities[0] == 'even' else -1
-            coeffGrid = self.getCoeffGrid()
             firstHarm = coeffGrid[:, 0]
             if derOrder == 0:
                 return np.pi * firstHarm
             else:
+                parities = self.getParities()
+                sign = 1 if parities[0] == 'even' else -1
                 firstHarm2Side = np.concatenate((sign * np.flip(firstHarm), firstHarm))
                 rho2Side = self.getTwoSidedRho()
                 ddRho = FinDiff(0, rho2Side, derOrder, acc = acc)
